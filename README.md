@@ -14,7 +14,7 @@ cat > ~/.vimrc <<EOF
 source \$VIMRUNTIME/defaults.vim
 set mouse-=a
 EOF
-sudo cp .vimrc ~root/.vimrc`
+sudo cp .vimrc ~root/.vimrc
 ```
 
 4. Add node names to hosts:
@@ -32,7 +32,7 @@ EOF
 ```bash
 node1$ vi .ssh/id_rsa
 node1$ chmod 0600 .ssh/id_rsa
-node1$ cat .ssh/authorized_keys`
+node1$ cat .ssh/authorized_keys
 ```
 
 ```bash
@@ -120,81 +120,41 @@ EOF
 sudo sysctl --system
 ```
 
-10. Install Docker Engine:
+10. Install Containerd:
+First take a look at [https://github.com/containerd/containerd/releases](https://github.com/containerd/containerd/releases) to find the latest version, then change the commands below if needed.
 ```bash
-sudo apt-get update && sudo apt-get install -y ca-certificates curl gnupg lsb-release
-curl -fsSL https://download.docker.com/linux/debian/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian \
-  $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-sudo apt-get update
-sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-sudo usermod -aG docker $USER
-newgrp docker
-```
-
-11. Install cri-dockerd
+wget https://github.com/containerd/containerd/releases/download/v1.6.3/containerd-1.6.3-linux-amd64.tar.gz
+sudo tar Cxzvf /usr/local containerd-1.6.3-linux-amd64.tar.gz
+sudo wget -O /usr/lib/systemd/system/containerd.service https://raw.githubusercontent.com/containerd/containerd/main/containerd.service
+sudo mkdir /etc/containerd
+containerd config default | sudo tee /etc/containerd/config.toml
+sudo sed -e 's/SystemdCgroup = false/SystemdCgroup = true/' -i /etc/containerd/config.toml
+``` 
+Download and install runc (note the latest version):
 ```bash
-export VER=$(curl -s https://api.github.com/repos/Mirantis/cri-dockerd/releases/latest|grep tag_name | cut -d '"' -f 4)
-echo $VER
-wget https://github.com/Mirantis/cri-dockerd/releases/download/${VER}/cri-dockerd-${VER}-linux-amd64.tar.gz
-tar xvf cri-dockerd-${VER}-linux-amd64.tar.gz cri-dockerd
-sudo mv cri-dockerd /usr/local/bin/
-wget https://raw.githubusercontent.com/Mirantis/cri-dockerd/master/packaging/systemd/cri-docker.service
-wget https://raw.githubusercontent.com/Mirantis/cri-dockerd/master/packaging/systemd/cri-docker.socket
-sudo mv cri-docker.socket cri-docker.service /etc/systemd/system/
-sudo sed -i -e 's,/usr/bin/cri-dockerd,/usr/local/bin/cri-dockerd,' /etc/systemd/system/cri-docker.service
-sudo systemctl daemon-reload
-sudo systemctl enable cri-docker.service
-sudo systemctl enable --now cri-docker.socket
+sudo wget -O /usr/local/sbin/runc \
+       https://github.com/opencontainers/runc/releases/download/v1.1.1/runc.amd64
+sudo chmod 0755 /usr/local/sbin/runc
 ```
-
-12. Install CNI plugins (note the latest version):
+Download and install CNI plugins from [https://github.com/containernetworking/plugins/releases](https://github.com/containernetworking/plugins/releases):
 ```bash
 wget https://github.com/containernetworking/plugins/releases/download/v1.1.1/cni-plugins-linux-amd64-v1.1.1.tgz
 sudo mkdir -p /opt/cni/bin
 sudo tar Cxzvf /opt/cni/bin cni-plugins-linux-amd64-v1.1.1.tgz
 ```
-
-13. Configure CNI bridge and loopback
+Enable and run containerd:
 ```bash
-sudo mkdir -p /etc/cni/net.d/
-POD_CIDR=10.200.3.0/24   # change third octet to node number
-cat <<EOF | sudo tee /etc/cni/net.d/10-bridge.conf
-{
-    "cniVersion": "0.4.0",
-    "name": "bridge",
-    "type": "bridge",
-    "bridge": "cnio0",
-    "isGateway": true,
-    "ipMasq": true,
-    "ipam": {
-        "type": "host-local",
-        "ranges": [
-          [{"subnet": "${POD_CIDR}"}]
-        ],
-        "routes": [{"dst": "0.0.0.0/0"}]
-    }
-}
-EOF
-```
-```bash
-cat <<EOF | sudo tee /etc/cni/net.d/99-loopback.conf
-{
-    "cniVersion": "0.4.0",
-    "name": "lo",
-    "type": "loopback"
-}
-EOF
+sudo systemctl daemon-reload
+sudo systemctl enable --now containerd
 ```
 
-14. Install crictl
+11. Install crictl
 ```bash
 CRICTL_VERSION=v1.22.0
 curl -L "https://github.com/kubernetes-sigs/cri-tools/releases/download/${CRICTL_VERSION}/crictl-${CRICTL_VERSION}-linux-amd64.tar.gz" | sudo tar -C /usr/local/bin -xz
 ```
 
-15. Install kubeadm, kubelet, kubectl
+12. Install kubeadm, kubelet, kubectl
 
 Note: look at https://www.downloadkubernetes.com/ to choose desired version.
 ```bash
@@ -215,12 +175,12 @@ curl -sSL "https://raw.githubusercontent.com/kubernetes/release/${RELEASE_VERSIO
 sudo systemctl enable --now kubelet
 ```
 
-16. Install additional packages for kubeadm:
+13. Install additional packages for kubeadm:
 ```bash
 sudo apt-get install -y conntrack ethtool socat
 ```
 
-17. Init the first node:
+14. Init the first node:
 ```bash
 sudo kubeadm init \
    --control-plane-endpoint=cluster1.k8s.my \
@@ -231,19 +191,19 @@ sudo kubeadm init \
 ```
 Save the output from init command to join other nodes!!!
 
-18. Configure kubectl:
+15. Configure kubectl:
 ```bash
 mkdir -p $HOME/.kube
 sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
 sudo chown $(id -u):$(id -g) $HOME/.kube/config
 ```
 
-19. Install flannel CNI plugin:
+16. Install flannel CNI plugin:
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
 ```
 
-19. Join node2 and node3:
+17. Join node2 and node3:
 ```bash
 sudo kubeadm join cluster1.k8s.my:6443 --token lx6gvi.fkmbi3wpl27h3zk8 \
    --discovery-token-ca-cert-hash sha256:8a08d81a07b740e8c266da30576f4097705863987cbf557ee94f774903fcf4b1 \
@@ -262,12 +222,12 @@ sudo kubeadm join cluster1.k8s.my:6443 --token lx6gvi.fkmbi3wpl27h3zk8 \
    --cri-socket=/run/cri-dockerd.sock
 ```
 
-20. Remove taint to enable pod schedulling on the control plane nodes:
+18. Remove taint to enable pod schedulling on the control plane nodes:
 ```bash
 kubectl taint nodes --all node-role.kubernetes.io/master-
 ```
 
-21. Enable kubectl completion for bash:
+19. Enable kubectl completion for bash:
 ```bash
 source <(kubectl completion bash)
 echo 'source <(kubectl completion bash)' >> .bashrc
