@@ -149,6 +149,7 @@ sudo systemctl enable --now containerd
 ```
 
 11. Install crictl
+Take a look at [https://github.com/kubernetes-sigs/cri-tools/releases/](https://github.com/kubernetes-sigs/cri-tools/releases/) and note the latest version:
 ```bash
 CRICTL_VERSION=v1.22.0
 curl -L "https://github.com/kubernetes-sigs/cri-tools/releases/download/${CRICTL_VERSION}/crictl-${CRICTL_VERSION}-linux-amd64.tar.gz" | sudo tar -C /usr/local/bin -xz
