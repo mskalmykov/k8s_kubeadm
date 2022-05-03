@@ -1,6 +1,6 @@
 1. Update and set up packages:
 ```bash
-sudo apt update && sudo apt upgrade -y && sudo apt install -y vim
+sudo apt update && sudo apt upgrade -y && sudo apt install -y vim curl
 ```
 
 2. Set up the timezone:
@@ -121,6 +121,7 @@ sudo sysctl --system
 ```
 
 10. Install Containerd:
+
 First take a look at [https://github.com/containerd/containerd/releases](https://github.com/containerd/containerd/releases) to find the latest version, then change the commands below if needed.
 ```bash
 wget https://github.com/containerd/containerd/releases/download/v1.6.3/containerd-1.6.3-linux-amd64.tar.gz
@@ -149,6 +150,7 @@ sudo systemctl enable --now containerd
 ```
 
 11. Install crictl
+
 Take a look at [https://github.com/kubernetes-sigs/cri-tools/releases/](https://github.com/kubernetes-sigs/cri-tools/releases/) and note the latest version:
 ```bash
 CRICTL_VERSION=v1.22.0
@@ -187,7 +189,7 @@ sudo kubeadm init \
    --control-plane-endpoint=cluster1.k8s.my \
    --apiserver-advertise-address=10.240.0.11 \
    --pod-network-cidr=10.244.0.0/16 \
-   --cri-socket=/run/cri-dockerd.sock \
+   --cri-socket=/run/containerd/containerd.sock \
    --upload-certs
 ```
 Save the output from init command to join other nodes!!!
@@ -201,7 +203,9 @@ sudo chown $(id -u):$(id -g) $HOME/.kube/config
 
 16. Install flannel CNI plugin:
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
+wget https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
+vi kube-flannel.yml # Add - --iface=eth1 to container args
+kubectl apply -f kube-flannel.yml
 ```
 
 17. Join node2 and node3:
@@ -211,7 +215,7 @@ sudo kubeadm join cluster1.k8s.my:6443 --token lx6gvi.fkmbi3wpl27h3zk8 \
    --control-plane \
    --certificate-key 9a277cddf35c2ea28cfb8171a6d3ec47803cac10b4131fb534a5a34181da8891 \
    --apiserver-advertise-address=10.240.0.12 \
-   --cri-socket=/run/cri-dockerd.sock
+   --cri-socket=/run/containerd/containerd.sock
 ```
 
 ```bash
@@ -220,7 +224,7 @@ sudo kubeadm join cluster1.k8s.my:6443 --token lx6gvi.fkmbi3wpl27h3zk8 \
    --control-plane \
    --certificate-key 9a277cddf35c2ea28cfb8171a6d3ec47803cac10b4131fb534a5a34181da8891 \
    --apiserver-advertise-address=10.240.0.13 \
-   --cri-socket=/run/cri-dockerd.sock
+   --cri-socket=/run/containerd/containerd.sock
 ```
 
 18. Remove taint to enable pod schedulling on the control plane nodes:
@@ -231,6 +235,6 @@ kubectl taint nodes --all node-role.kubernetes.io/master-
 19. Enable kubectl completion for bash:
 ```bash
 source <(kubectl completion bash)
-echo 'source <(kubectl completion bash)' >> .bashrc
+echo 'source <(kubectl completion bash)' >> ~/.bashrc
 ```
 
