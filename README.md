@@ -192,6 +192,7 @@ vrrp_instance VI_1 {
 EOF
 sudo systemctl start keepalived
 ```
+If you want the particular node to become master, add `priority 150` to its instance config.
 
 ### Change API server IP to virtual
 ```bash
