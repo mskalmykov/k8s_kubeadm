@@ -1,14 +1,14 @@
-1. Update and set up packages:
+### Update and set up packages:
 ```bash
 sudo apt update && sudo apt upgrade -y && sudo apt install -y vim curl
 ```
 
-2. Set up the timezone:
+### Set up the timezone:
 ```bash
 sudo dpkg-reconfigure tzdata
 ```
 
-3. Set up vim:
+### Set up vim:
 ```bash
 cat > ~/.vimrc <<EOF
 source \$VIMRUNTIME/defaults.vim
@@ -17,7 +17,7 @@ EOF
 sudo cp .vimrc ~root/.vimrc
 ```
 
-4. Add node names to hosts:
+### Add node names to hosts:
 ```bash
 cat <<EOF | sudo tee -a /etc/hosts
 
@@ -28,7 +28,7 @@ cat <<EOF | sudo tee -a /etc/hosts
 EOF
 ```
 
-5. Distribute node1 ssh keys to other nodes:
+### Distribute node1 ssh keys to other nodes:
 ```bash
 node1$ vi .ssh/id_rsa
 node1$ chmod 0600 .ssh/id_rsa
@@ -41,12 +41,12 @@ ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDMgJW7aVveniLwqtLZ2+mGjlW5SxcsLcoAGraPhh1l
 EOF
 ```
 
-6. Install keepalived. 
+### Install keepalived. 
 ```bash
 sudo apt install -y keepalived
 ```
 
-7. Configure and start keepalived:
+### Configure and start keepalived:
 node1:
 
 ```bash
@@ -101,7 +101,7 @@ EOF
 sudo systemctl start keepalived
 ```
 
-8. Load required network modules:
+### Load required network modules:
 ```bash
 cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
 overlay
@@ -110,7 +110,7 @@ EOF
 sudo modprobe -a overlay br_netfilter
 ```
 
-9. Add settings to allow iptables to view bridged traffic and to enable routing:
+### Add settings to allow iptables to view bridged traffic and to enable routing:
 ```bash
 cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
 net.bridge.bridge-nf-call-ip6tables = 1
@@ -120,12 +120,12 @@ EOF
 sudo sysctl --system
 ```
 
-10. Install Containerd:
+### Install Containerd:
 
 First take a look at [https://github.com/containerd/containerd/releases](https://github.com/containerd/containerd/releases) to find the latest version, then change the commands below if needed.
 ```bash
-wget https://github.com/containerd/containerd/releases/download/v1.6.3/containerd-1.6.3-linux-amd64.tar.gz
-sudo tar Cxzvf /usr/local containerd-1.6.3-linux-amd64.tar.gz
+wget https://github.com/containerd/containerd/releases/download/v1.6.4/containerd-1.6.4-linux-amd64.tar.gz
+sudo tar Cxzvf /usr/local containerd-1.6.4-linux-amd64.tar.gz
 sudo wget -O /usr/lib/systemd/system/containerd.service https://raw.githubusercontent.com/containerd/containerd/main/containerd.service
 sudo mkdir /etc/containerd
 containerd config default | sudo tee /etc/containerd/config.toml
@@ -149,92 +149,70 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now containerd
 ```
 
-11. Install crictl
-
-Take a look at [https://github.com/kubernetes-sigs/cri-tools/releases/](https://github.com/kubernetes-sigs/cri-tools/releases/) and note the latest version:
-```bash
-CRICTL_VERSION=v1.22.0
-curl -L "https://github.com/kubernetes-sigs/cri-tools/releases/download/${CRICTL_VERSION}/crictl-${CRICTL_VERSION}-linux-amd64.tar.gz" | sudo tar -C /usr/local/bin -xz
-```
-
-12. Install kubeadm, kubelet, kubectl
-
-Note: look at https://www.downloadkubernetes.com/ to choose desired version.
-```bash
-RELEASE="v1.22.9"
-ARCH="amd64"
-DOWNLOAD_DIR="/usr/local/bin"
-cd ${DOWNLOAD_DIR}
-sudo curl -L --remote-name-all https://storage.googleapis.com/kubernetes-release/release/${RELEASE}/bin/linux/${ARCH}/{kubeadm,kubelet,kubectl}
-sudo chmod +x {kubeadm,kubelet,kubectl}
-```
+### Install kubeadm, kubelet, kubectl
 
 ```bash
-RELEASE_VERSION="v0.4.0"
-curl -sSL "https://raw.githubusercontent.com/kubernetes/release/${RELEASE_VERSION}/cmd/kubepkg/templates/latest/deb/kubelet/lib/systemd/system/kubelet.service" | sed "s:/usr/bin:${DOWNLOAD_DIR}:g" | sudo tee /etc/systemd/system/kubelet.service
-sudo mkdir -p /etc/systemd/system/kubelet.service.d
-curl -sSL "https://raw.githubusercontent.com/kubernetes/release/${RELEASE_VERSION}/cmd/kubepkg/templates/latest/deb/kubeadm/10-kubeadm.conf" | sed "s:/usr/bin:${DOWNLOAD_DIR}:g" | sudo tee /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
+sudo apt-get update
+sudo apt-get install -y apt-transport-https ca-certificates curl
+sudo curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg
+echo "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee /etc/apt/sources.list.d/kubernetes.list
 
-sudo systemctl enable --now kubelet
+sudo apt-get update
+sudo apt-get install -y kubelet kubeadm kubectl
+sudo apt-mark hold kubelet kubeadm kubectl
 ```
 
-13. Install additional packages for kubeadm:
-```bash
-sudo apt-get install -y conntrack ethtool socat
-```
-
-14. Init the first node:
+### Init the first node:
 ```bash
 sudo kubeadm init \
    --control-plane-endpoint=cluster1.k8s.my \
    --apiserver-advertise-address=10.240.0.11 \
    --pod-network-cidr=10.244.0.0/16 \
-   --cri-socket=/run/containerd/containerd.sock \
    --upload-certs
 ```
 Save the output from init command to join other nodes!!!
 
-15. Configure kubectl:
+### Configure kubectl:
 ```bash
 mkdir -p $HOME/.kube
 sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
 sudo chown $(id -u):$(id -g) $HOME/.kube/config
 ```
 
-16. Install flannel CNI plugin:
+### Install flannel CNI plugin (first node only):
 ```bash
 wget https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
 vi kube-flannel.yml # Add - --iface=eth1 to container args
 kubectl apply -f kube-flannel.yml
 ```
 
-17. Join node2 and node3:
+### Join node2 and node3:
 ```bash
-sudo kubeadm join cluster1.k8s.my:6443 --token lx6gvi.fkmbi3wpl27h3zk8 \
-   --discovery-token-ca-cert-hash sha256:8a08d81a07b740e8c266da30576f4097705863987cbf557ee94f774903fcf4b1 \
-   --control-plane \
-   --certificate-key 9a277cddf35c2ea28cfb8171a6d3ec47803cac10b4131fb534a5a34181da8891 \
-   --apiserver-advertise-address=10.240.0.12 \
-   --cri-socket=/run/containerd/containerd.sock
+sudo kubeadm join cluster1.k8s.my:6443 \
+    --token sjkleg.r53wu4cfntnc3a0y \
+    --discovery-token-ca-cert-hash sha256:d306d50bec853fcb24f7535ea5226abcf200163ab7825113b5a67fc1ff7ab8ba \
+    --certificate-key 7682de9c2fd19f8a4bde2f2072537084736a05bfd66b6936f46cb792602ba803 \
+    --control-plane \
+    --apiserver-advertise-address=10.240.0.12
 ```
 
 ```bash
-sudo kubeadm join cluster1.k8s.my:6443 --token lx6gvi.fkmbi3wpl27h3zk8 \
-   --discovery-token-ca-cert-hash sha256:8a08d81a07b740e8c266da30576f4097705863987cbf557ee94f774903fcf4b1 \
-   --control-plane \
-   --certificate-key 9a277cddf35c2ea28cfb8171a6d3ec47803cac10b4131fb534a5a34181da8891 \
-   --apiserver-advertise-address=10.240.0.13 \
-   --cri-socket=/run/containerd/containerd.sock
+sudo kubeadm join cluster1.k8s.my:6443 \
+    --token sjkleg.r53wu4cfntnc3a0y \
+    --discovery-token-ca-cert-hash sha256:d306d50bec853fcb24f7535ea5226abcf200163ab7825113b5a67fc1ff7ab8ba \
+    --certificate-key 7682de9c2fd19f8a4bde2f2072537084736a05bfd66b6936f46cb792602ba803 \
+    --control-plane \
+    --apiserver-advertise-address=10.240.0.13
 ```
 
-18. Remove taint to enable pod schedulling on the control plane nodes:
+### Remove taint to enable pod schedulling on the control plane nodes:
 ```bash
-kubectl taint nodes --all node-role.kubernetes.io/master-
+kubectl taint nodes --all node-role.kubernetes.io/control-plane-
+kubectl taint nodes --all node-role.kubernetes.io/master- 
 ```
 
-19. Enable kubectl completion for bash:
+### Enable kubectl completion for bash:
 ```bash
 source <(kubectl completion bash)
 echo 'source <(kubectl completion bash)' >> ~/.bashrc
 ```
-
