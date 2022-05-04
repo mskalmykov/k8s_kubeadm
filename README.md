@@ -1,14 +1,14 @@
-### Update and set up packages:
+### Update and set up packages
 ```bash
 sudo apt update && sudo apt upgrade -y && sudo apt install -y vim curl
 ```
 
-### Set up the timezone:
+### Set up the timezone
 ```bash
 sudo dpkg-reconfigure tzdata
 ```
 
-### Set up vim:
+### Set up vim
 ```bash
 cat > ~/.vimrc <<EOF
 source \$VIMRUNTIME/defaults.vim
@@ -17,18 +17,18 @@ EOF
 sudo cp .vimrc ~root/.vimrc
 ```
 
-### Add node names to hosts:
+### Add node names to hosts
 ```bash
 cat <<EOF | sudo tee -a /etc/hosts
 
-10.240.0.10 cluster1.k8s.my cluster1
+10.240.0.11 cluster1.k8s.my cluster1
 10.240.0.11 node1.k8s.my node1
 10.240.0.12 node2.k8s.my node2
 10.240.0.13 node3.k8s.my node3
 EOF
 ```
 
-### Distribute node1 ssh keys to other nodes:
+### Distribute node1 ssh keys to other nodes
 ```bash
 node1$ vi .ssh/id_rsa
 node1$ chmod 0600 .ssh/id_rsa
@@ -41,67 +41,7 @@ ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDMgJW7aVveniLwqtLZ2+mGjlW5SxcsLcoAGraPhh1l
 EOF
 ```
 
-### Install keepalived. 
-```bash
-sudo apt install -y keepalived
-```
-
-### Configure and start keepalived:
-node1:
-
-```bash
-cat <<EOF | sudo tee /etc/keepalived/keepalived.conf
-vrrp_instance VI_1 {
-    state MASTER
-    interface eth1
-    virtual_router_id 17
-    priority 100
-    advert_int 1
-    virtual_ipaddress {
-        10.240.0.10
-    }
-}
-EOF
-sudo systemctl start keepalived
-```
-
-node2:
-
-```bash
-cat <<EOF | sudo tee /etc/keepalived/keepalived.conf
-vrrp_instance VI_1 {
-    state BACKUP
-    interface eth1
-    virtual_router_id 17
-    priority 90
-    advert_int 1
-    virtual_ipaddress {
-        10.240.0.10
-    }
-}
-EOF
-sudo systemctl start keepalived
-```
-
-node3:
-
-```bash
-cat <<EOF | sudo tee /etc/keepalived/keepalived.conf
-vrrp_instance VI_1 {
-    state BACKUP
-    interface eth1
-    virtual_router_id 17
-    priority 80
-    advert_int 1
-    virtual_ipaddress {
-        10.240.0.10
-    }
-}
-EOF
-sudo systemctl start keepalived
-```
-
-### Load required network modules:
+### Load required network modules
 ```bash
 cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
 overlay
@@ -110,7 +50,7 @@ EOF
 sudo modprobe -a overlay br_netfilter
 ```
 
-### Add settings to allow iptables to view bridged traffic and to enable routing:
+### Add settings to allow iptables to view bridged traffic and to enable routing
 ```bash
 cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
 net.bridge.bridge-nf-call-ip6tables = 1
@@ -120,7 +60,7 @@ EOF
 sudo sysctl --system
 ```
 
-### Install Containerd:
+### Install containerd
 
 First take a look at [https://github.com/containerd/containerd/releases](https://github.com/containerd/containerd/releases) to find the latest version, then change the commands below if needed.
 ```bash
@@ -162,7 +102,7 @@ sudo apt-get install -y kubelet kubeadm kubectl
 sudo apt-mark hold kubelet kubeadm kubectl
 ```
 
-### Init the first node:
+### Init the first node
 ```bash
 sudo kubeadm init \
    --control-plane-endpoint=cluster1.k8s.my \
@@ -172,21 +112,21 @@ sudo kubeadm init \
 ```
 Save the output from init command to join other nodes!!!
 
-### Configure kubectl:
+### Configure kubectl
 ```bash
 mkdir -p $HOME/.kube
 sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
 sudo chown $(id -u):$(id -g) $HOME/.kube/config
 ```
 
-### Install flannel CNI plugin (first node only):
+### Install flannel CNI plugin (first node only)
 ```bash
 wget https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
 vi kube-flannel.yml # Add - --iface=eth1 to container args
 kubectl apply -f kube-flannel.yml
 ```
 
-### Join node2 and node3:
+### Join node2 and node3
 ```bash
 sudo kubeadm join cluster1.k8s.my:6443 \
     --token sjkleg.r53wu4cfntnc3a0y \
@@ -205,14 +145,55 @@ sudo kubeadm join cluster1.k8s.my:6443 \
     --apiserver-advertise-address=10.240.0.13
 ```
 
-### Remove taint to enable pod schedulling on the control plane nodes:
+### Remove taint to enable pod schedulling on the control plane nodes
 ```bash
 kubectl taint nodes --all node-role.kubernetes.io/control-plane-
 kubectl taint nodes --all node-role.kubernetes.io/master- 
 ```
 
-### Enable kubectl completion for bash:
+### Enable kubectl completion for bash
 ```bash
 source <(kubectl completion bash)
 echo 'source <(kubectl completion bash)' >> ~/.bashrc
+```
+
+### Install keepalived
+```bash
+sudo apt install -y keepalived
+```
+
+### Configure and start keepalived
+```bash
+cat <<EOF | sudo tee /etc/keepalived/keepalived.conf
+global_defs {
+      enable_script_security
+}
+
+vrrp_script apiserver {
+   script   "/usr/bin/curl -s -k https://localhost:6443/healthz -o /dev/null"
+   interval 20
+   timeout  5
+   rise     3
+   fall     2
+   user     root
+}
+
+vrrp_instance VI_1 {
+    interface eth1
+    virtual_router_id 17
+    advert_int 1
+    virtual_ipaddress {
+        10.240.0.10
+    }
+    track_script {
+        apiserver
+    }
+}
+EOF
+sudo systemctl start keepalived
+```
+
+### Change API server IP to virtual
+```bash
+sudo sed -e 's/10.240.0.11 cluster1/10.240.0.10 cluster1/' -i /etc/hosts
 ```
